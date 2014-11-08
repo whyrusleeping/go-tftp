@@ -106,6 +106,7 @@ func (s *Server) HandleReadReq(rrq *pkt.ReqPacket, addr *net.UDPAddr) error {
 		if err != nil {
 			return err
 		}
+		blknum++
 	}
 	return nil
 }
