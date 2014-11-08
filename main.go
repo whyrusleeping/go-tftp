@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/whyrusleeping/tftp/server"
+	"github.com/whyrusleeping/go-tftp/server"
 	"os"
 )
 

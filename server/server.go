@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	pkt "github.com/whyrusleeping/tftp/packet"
+	pkt "github.com/whyrusleeping/go-tftp/packet"
 )
 
 // TftpMTftpMaxPacketSize is the practical limit of the size of a UDP

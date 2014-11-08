@@ -6,7 +6,7 @@ import (
 	"net"
 	"os"
 
-	pkt "github.com/whyrusleeping/tftp/packet"
+	pkt "github.com/whyrusleeping/go-tftp/packet"
 )
 
 // HandleWriteRequest makes a UDP connection back to the client

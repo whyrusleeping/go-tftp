@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	pkt "github.com/whyrusleeping/tftp/packet"
+	pkt "github.com/whyrusleeping/go-tftp/packet"
 )
 
 func sendDataPacket(d *pkt.DataPacket, con *net.UDPConn) error {
