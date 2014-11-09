@@ -79,6 +79,10 @@ func (p *AckPacket) GetType() uint16 {
 	return ACK
 }
 
+func (p *AckPacket) GetBlocknum() uint16 {
+	return uint16(*p)
+}
+
 func (p *AckPacket) Bytes() []byte {
 	buf := make([]byte, 4)
 	binary.BigEndian.PutUint16(buf[:2], ACK)

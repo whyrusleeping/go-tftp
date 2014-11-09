@@ -12,39 +12,46 @@ import (
 
 // TftpMTftpMaxPacketSize is the practical limit of the size of a UDP
 // packet, which is the size of an Ethernet MTU minus the headers of
-// TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (from google)
+// TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (source: google).
 const TftpMaxPacketSize = 1468
 
-// AckTimeout is the total time to wait before timing out on an ACK
+// AckTimeout is the total time to wait before timing out on an ACK.
 var AckTimeout = time.Second * 20
 
 // RetransmitTime is how long to wait before retransmitting a packet
-// if an ACK has not yet been received
+// if an ACK has not yet been received.
 var RetransmitTime = time.Second * 5
 
-// ErrTimeout is returned when an action times out
+// ErrTimeout is returned when an action times out.
 var ErrTimeout = errors.New("timed out")
 
 // ErrUnexpectedPacket is returned when one packet type is
-// received when a different one was expected
+// received when a different one was expected.
 var ErrUnexpectedPacket = errors.New("unexpected packet received")
 
-// Server is a TFTP server
+// Server is a TFTP server.
 type Server struct {
-	// the directory to read and write files from
+	// the directory to read and write files from.
 	servdir string
 }
 
+// NewServer returns a new tftp Server instance that will
+// serve files from the given directory
 func NewServer(dir string) *Server {
 	return &Server{
 		servdir: dir,
 	}
 }
 
-// Handle a new client request
+// Handle a new client read or write request.
 func (s *Server) HandleClient(addr *net.UDPAddr, req pkt.Packet) {
 	log.Println("Handle Client!")
 
+	reqpkt, ok := req.(*pkt.ReqPacket)
+	if !ok {
+		log.Printf("Invalid packet type for new connection!")
+		return
+	}
 	// Re-resolve for verification
 	clientaddr, err := net.ResolveUDPAddr("udp", addr.String())
 	if err != nil {
@@ -52,17 +59,13 @@ func (s *Server) HandleClient(addr *net.UDPAddr, req pkt.Packet) {
 		return
 	}
 
-	switch req := req.(type) {
-	case *pkt.ReqPacket:
-		if req.GetType() == pkt.RRQ {
-			s.HandleReadReq(req, clientaddr)
-		} else if req.GetType() == pkt.WRQ {
-			s.HandleWriteReq(req, clientaddr)
-		} else {
-			log.Println("Invalid Packet Type!")
-		}
+	switch reqpkt.GetType() {
+	case pkt.RRQ:
+		s.HandleReadReq(reqpkt, clientaddr)
+	case pkt.WRQ:
+		s.HandleWriteReq(reqpkt, clientaddr)
 	default:
-		log.Printf("Invalid packet type for new connection!")
+		log.Println("Invalid Packet Type!")
 	}
 }
 
