@@ -98,7 +98,7 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 			return 0, p
 		case *pkt.AckPacket:
 			if p.GetBlocknum() != blknum {
-				fmt.Println("Wrong blocknumber!")
+				fmt.Printf("Wrong blocknumber! (%d != %d)\n", p.GetBlocknum(), blknum)
 				continue
 			}
 		default:

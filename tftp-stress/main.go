@@ -98,7 +98,7 @@ func main() {
 	nthreads := flag.Int("threads", 1, "number of threads to run")
 	nloops := flag.Int("loops", 1, "number of operations per thread")
 	serv := flag.String("serv", "127.0.0.1:6900", "address of server to benchmark")
-	filename := flag.String("file", "testfile", "name of file to work with (for reads only)")
+	filename := flag.String("file", "", "name of file to work with (for reads only)")
 	upload := flag.Int("upload", -1, "size of data for upload testing")
 
 	flag.Parse()
@@ -107,8 +107,7 @@ func main() {
 	_ = nthreads
 	_ = upload
 
-	fmt.Printf("File: '%s'\n", *filename)
-	fmt.Printf("Server: '%s'\n", *serv)
+	fmt.Printf("Testing Server: '%s'\n", *serv)
 
 	if *upload > 0 {
 		benchWrites(*serv, *nthreads, *nloops, *upload)
