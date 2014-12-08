@@ -102,7 +102,7 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 				continue
 			}
 		default:
-			return 0, errors.New("unexpected packet!")
+			return 0, fmt.Errorf("unexpected packet: %v, %d", p, p.GetType())
 		}
 		blknum++
 		buf = buf[:blockSize]
