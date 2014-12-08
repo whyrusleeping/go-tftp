@@ -8,6 +8,8 @@ import (
 	"log"
 )
 
+var _ = log.Fatal
+
 // ErrInvalidPacket is returned when given malformed data
 var ErrInvalidPacket = errors.New("invalid packet")
 
@@ -48,7 +50,15 @@ func (p *ReqPacket) GetType() uint16 {
 // satisfy the interface (consider adding this later for
 // client use)
 func (p *ReqPacket) Bytes() []byte {
-	return nil
+	buf := new(bytes.Buffer)
+	opcode := make([]byte, 2)
+	binary.BigEndian.PutUint16(opcode, p.GetType())
+	buf.Write(opcode)
+	buf.WriteString(p.Filename)
+	buf.WriteByte(0)
+	buf.WriteString(p.Mode)
+	buf.WriteByte(0)
+	return buf.Bytes()
 }
 
 type DataPacket struct {
@@ -90,6 +100,27 @@ func (p *AckPacket) Bytes() []byte {
 	return buf
 }
 
+type ErrorPacket struct {
+	Code  uint16
+	Value string
+}
+
+func (p *ErrorPacket) Error() string {
+	return p.Value
+}
+
+func (p *ErrorPacket) Bytes() []byte {
+	buf := make([]byte, 4+len(p.Value))
+	binary.BigEndian.PutUint16(buf[:2], ERROR)
+	binary.BigEndian.PutUint16(buf[2:4], p.Code)
+	copy(buf[4:], p.Value)
+	return buf
+}
+
+func (p *ErrorPacket) GetType() uint16 {
+	return ERROR
+}
+
 // ReadPacket deserializes a packet from the given buffer
 func ParsePacket(buf []byte) (Packet, error) {
 	if len(buf) < 2 {
@@ -97,7 +128,6 @@ func ParsePacket(buf []byte) (Packet, error) {
 	}
 
 	pktType := binary.BigEndian.Uint16(buf[0:2])
-	log.Println(pktType)
 	switch pktType {
 	case RRQ, WRQ:
 		vals := bytes.Split(buf[2:], []byte{0})
@@ -117,6 +147,12 @@ func ParsePacket(buf []byte) (Packet, error) {
 		return &DataPacket{
 			BlockNum: blknum,
 			Data:     buf[4:],
+		}, nil
+	case ERROR:
+		errcode := binary.BigEndian.Uint16(buf[2:4])
+		return &ErrorPacket{
+			Code:  errcode,
+			Value: string(buf[4:]),
 		}, nil
 	default:
 		return nil, ErrPacketType
