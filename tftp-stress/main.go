@@ -36,6 +36,9 @@ func benchReads(server, file string, threads, loops int) {
 		}()
 	}
 
+	total := threads * loops
+	i := 0
+
 	go func() {
 		wg.Wait()
 		close(bwcollect)
@@ -44,7 +47,9 @@ func benchReads(server, file string, threads, loops int) {
 	sum := 0
 	for bw := range bwcollect {
 		sum += bw
+		fmt.Printf("\r%d/%d", i, total)
 	}
+	fmt.Println()
 	took := time.Now().Sub(before)
 
 	fmt.Printf("Total Transferred: %d\n", sum)
@@ -57,6 +62,7 @@ func benchWrites(server string, threads, loops, nbytes int) {
 	bwcollect := make(chan int, 32)
 	before := time.Now()
 
+	total := threads * loops
 	for i := 0; i < threads; i++ {
 		wg.Add(1)
 		go func(thr int) {
@@ -84,9 +90,13 @@ func benchWrites(server string, threads, loops, nbytes int) {
 	}()
 
 	sum := 0
+	i := 0
 	for bw := range bwcollect {
 		sum += bw
+		i++
+		fmt.Printf("\r%d/%d", i, total)
 	}
+	fmt.Println()
 	took := time.Now().Sub(before)
 
 	fmt.Printf("Total Transferred: %d\n", sum)
