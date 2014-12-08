@@ -93,6 +93,9 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 	buf := make([]byte, blockSize)
 	for {
 		p, addr, err := cl.recvPacket()
+		if err != nil {
+			return 0, err
+		}
 		switch p := p.(type) {
 		case *pkt.ErrorPacket:
 			return 0, p
