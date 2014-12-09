@@ -121,9 +121,6 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 		if err != nil && err != io.EOF {
 			return 0, err
 		}
-		if n == 0 {
-			break
-		}
 		buf = buf[:n]
 		xferred += n
 		err = cl.sendPacket(&pkt.DataPacket{
@@ -132,6 +129,9 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 		}, addr)
 		if err != nil {
 			return 0, err
+		}
+		if n == 0 {
+			break
 		}
 	}
 
