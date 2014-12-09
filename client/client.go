@@ -9,14 +9,10 @@ import (
 	"time"
 )
 
-// TftpMTftpMaxPacketSize is the practical limit of the size of a UDP
-// packet, which is the size of an Ethernet MTU minus the headers of
-// TFTP (4 bytes), UDP (8 bytes) and IP (20 bytes). (source: google).
-const TftpMaxPacketSize = 1468
-
 type TftpClient struct {
-	servaddr *net.UDPAddr
-	udpconn  *net.UDPConn
+	servaddr  *net.UDPAddr
+	udpconn   *net.UDPConn
+	Blocksize int
 }
 
 func NewTftpClient(addr string) (*TftpClient, error) {
@@ -36,8 +32,9 @@ func NewTftpClient(addr string) (*TftpClient, error) {
 	}
 
 	return &TftpClient{
-		servaddr: raddr,
-		udpconn:  uconn,
+		servaddr:  raddr,
+		udpconn:   uconn,
+		Blocksize: 512,
 	}, nil
 }
 
@@ -55,8 +52,7 @@ func (cl *TftpClient) sendPacket(p pkt.Packet, addr *net.UDPAddr) error {
 	return nil
 }
 
-func (cl *TftpClient) recvPacket() (pkt.Packet, *net.UDPAddr, error) {
-	buf := make([]byte, TftpMaxPacketSize)
+func (cl *TftpClient) recvPacket(buf []byte) (pkt.Packet, *net.UDPAddr, error) {
 	n, addr, err := cl.udpconn.ReadFromUDP(buf)
 	if err != nil {
 		return nil, nil, err
@@ -77,38 +73,50 @@ func (cl *TftpClient) recvPacket() (pkt.Packet, *net.UDPAddr, error) {
 
 func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 	req := &pkt.ReqPacket{
-		Filename: filename,
-		Mode:     "octet",
-		Type:     pkt.WRQ,
+		Filename:  filename,
+		Mode:      "octet",
+		Type:      pkt.WRQ,
+		BlockSize: cl.Blocksize,
 	}
 
 	err := cl.sendPacket(req, cl.servaddr)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 
-	blockSize := 512
 	blknum := uint16(0)
 	xferred := 0
-	buf := make([]byte, blockSize)
+	pktbuf := make([]byte, 1000)
+	buf := make([]byte, cl.Blocksize)
 	for {
-		p, addr, err := cl.recvPacket()
+		p, addr, err := cl.recvPacket(pktbuf)
 		if err != nil {
 			return 0, err
 		}
 		switch p := p.(type) {
 		case *pkt.ErrorPacket:
+			fmt.Println("Error packet.")
 			return 0, p
 		case *pkt.AckPacket:
 			if p.GetBlocknum() != blknum {
 				fmt.Printf("Wrong blocknumber! (%d != %d)\n", p.GetBlocknum(), blknum)
 				continue
 			}
+			if blknum == 0 && cl.Blocksize != 512 {
+				fmt.Println("Didnt get expected OACK.")
+			}
+		case *pkt.OAckPacket:
+			if blknum != 0 {
+				return 0, errors.New("Received OACK at unexpected time...")
+			}
+			if p.Options["blksize"] != fmt.Sprint(cl.Blocksize) {
+				fmt.Printf("Blocksize Negotiation failed!\ngot '%s'\n", p.Options["blocksize"])
+			}
 		default:
 			return 0, fmt.Errorf("unexpected packet: %v, %d", p, p.GetType())
 		}
 		blknum++
-		buf = buf[:blockSize]
+		buf = buf[:cl.Blocksize]
 		n, err := data.Read(buf)
 		if err != nil && err != io.EOF {
 			return 0, err
@@ -133,9 +141,10 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
 	before := time.Now()
 	req := &pkt.ReqPacket{
-		Filename: filename,
-		Mode:     "octet",
-		Type:     pkt.RRQ,
+		Filename:  filename,
+		Mode:      "octet",
+		Type:      pkt.RRQ,
+		BlockSize: cl.Blocksize,
 	}
 
 	err := cl.sendPacket(req, cl.servaddr)
@@ -143,23 +152,35 @@ func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
 		return 0, 0, err
 	}
 
-	blockSize := 512
 	xfersize := 0
 	blknum := uint16(1)
+	pktbuf := make([]byte, cl.Blocksize+100)
 	for {
-		datapkt, sendaddr, err := cl.recvPacket()
+		datapkt, sendaddr, err := cl.recvPacket(pktbuf)
 		if err != nil {
 			return 0, 0, err
 		}
-		if datapkt.GetType() == pkt.ERROR {
+
+		var data []byte
+		switch datapkt.GetType() {
+		case pkt.ERROR:
 			return 0, 0, datapkt.(*pkt.ErrorPacket)
-		}
-		if datapkt.GetType() != pkt.DATA {
+		case pkt.DATA:
+			datapkt := datapkt.(*pkt.DataPacket)
+			data = datapkt.Data
+		case pkt.OACK:
+			fmt.Println("GOT OACK!!!")
+			blknum--
+			oack := datapkt.(*pkt.OAckPacket)
+			if oack.Options["blksize"] != fmt.Sprint(cl.Blocksize) {
+				return 0, 0, errors.New("failed to negotiate blocksize")
+			}
+		default:
+			fmt.Printf("Got: %d\n", datapkt.GetType())
+			fmt.Println(datapkt.(*pkt.AckPacket).GetBlocknum())
+			fmt.Println(blknum)
 			return 0, 0, errors.New("Expected DATA packet!")
 		}
-		data := datapkt.(*pkt.DataPacket)
-
-		//fmt.Printf("got data:\n%s\n", data.Data)
 
 		ack := pkt.NewAck(blknum)
 		err = cl.sendPacket(ack, sendaddr)
@@ -167,8 +188,8 @@ func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
 			return 0, 0, err
 		}
 
-		xfersize += len(data.Data)
-		if len(data.Data) < blockSize {
+		xfersize += len(data)
+		if len(data) < cl.Blocksize {
 			break
 		}
 		blknum++

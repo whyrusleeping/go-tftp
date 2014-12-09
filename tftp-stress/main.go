@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func benchReads(server, file string, threads, loops int) {
+func benchReads(server, file string, threads, loops, blocksize int) {
 	wg := &sync.WaitGroup{}
 
 	bwcollect := make(chan int, 32)
@@ -21,6 +21,7 @@ func benchReads(server, file string, threads, loops int) {
 		go func() {
 			defer wg.Done()
 			cli, err := client.NewTftpClient(server)
+			cli.Blocksize = blocksize
 			if err != nil {
 				panic(err)
 			}
@@ -31,7 +32,6 @@ func benchReads(server, file string, threads, loops int) {
 					panic(err)
 				}
 				bwcollect <- nbytes
-
 			}
 		}()
 	}
@@ -47,6 +47,7 @@ func benchReads(server, file string, threads, loops int) {
 	sum := 0
 	for bw := range bwcollect {
 		sum += bw
+		i++
 		fmt.Printf("\r%d/%d", i, total)
 	}
 	fmt.Println()
@@ -56,7 +57,7 @@ func benchReads(server, file string, threads, loops int) {
 	fmt.Printf("Overall Bandwidth: %.0f Bps\n", float64(sum)/took.Seconds())
 }
 
-func benchWrites(server string, threads, loops, nbytes int) {
+func benchWrites(server string, threads, loops, nbytes, blocksize int) {
 	wg := &sync.WaitGroup{}
 
 	bwcollect := make(chan int, 32)
@@ -68,6 +69,7 @@ func benchWrites(server string, threads, loops, nbytes int) {
 		go func(thr int) {
 			defer wg.Done()
 			cli, err := client.NewTftpClient(server)
+			cli.Blocksize = blocksize
 			if err != nil {
 				panic(err)
 			}
@@ -110,6 +112,7 @@ func main() {
 	serv := flag.String("serv", "127.0.0.1:6900", "address of server to benchmark")
 	filename := flag.String("file", "", "name of file to work with (for reads only)")
 	upload := flag.Int("upload", -1, "size of data for upload testing")
+	blocksize := flag.Int("blocksize", 512, "tftp blocksize")
 
 	flag.Parse()
 
@@ -120,8 +123,8 @@ func main() {
 	fmt.Printf("Testing Server: '%s'\n", *serv)
 
 	if *upload > 0 {
-		benchWrites(*serv, *nthreads, *nloops, *upload)
+		benchWrites(*serv, *nthreads, *nloops, *upload, *blocksize)
 	} else {
-		benchReads(*serv, *filename, *nthreads, *nloops)
+		benchReads(*serv, *filename, *nthreads, *nloops, *blocksize)
 	}
 }

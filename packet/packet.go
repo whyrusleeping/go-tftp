@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
 )
 
@@ -36,9 +37,10 @@ type Packet interface {
 }
 
 type ReqPacket struct {
-	Filename string
-	Mode     string
-	Type     uint16
+	Filename  string
+	Mode      string
+	Type      uint16
+	BlockSize int
 }
 
 func (p *ReqPacket) GetType() uint16 {
@@ -58,6 +60,12 @@ func (p *ReqPacket) Bytes() []byte {
 	buf.WriteByte(0)
 	buf.WriteString(p.Mode)
 	buf.WriteByte(0)
+	if p.BlockSize != 0 && p.BlockSize != 512 {
+		buf.WriteString("blksize")
+		buf.WriteByte(0)
+		buf.WriteString(fmt.Sprint(p.BlockSize))
+		buf.WriteByte(0)
+	}
 	return buf.Bytes()
 }
 
@@ -121,6 +129,24 @@ func (p *ErrorPacket) GetType() uint16 {
 	return ERROR
 }
 
+type OAckPacket struct {
+	Options map[string]string
+}
+
+func NewOAckPacket() *OAckPacket {
+	return &OAckPacket{
+		Options: make(map[string]string),
+	}
+}
+
+func (oa *OAckPacket) Bytes() []byte {
+	panic("Not yet implemented!")
+}
+
+func (oa *OAckPacket) GetType() uint16 {
+	return OACK
+}
+
 // ReadPacket deserializes a packet from the given buffer
 func ParsePacket(buf []byte) (Packet, error) {
 	if len(buf) < 2 {
@@ -154,6 +180,13 @@ func ParsePacket(buf []byte) (Packet, error) {
 			Code:  errcode,
 			Value: string(buf[4:]),
 		}, nil
+	case OACK:
+		oack := NewOAckPacket()
+		vals := bytes.Split(buf[2:], []byte{0})
+		for i := 0; i+1 < len(vals); i += 2 {
+			oack.Options[string(vals[i])] = string(vals[i+1])
+		}
+		return oack, nil
 	default:
 		return nil, ErrPacketType
 	}
