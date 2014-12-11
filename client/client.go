@@ -172,7 +172,7 @@ func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
 		case pkt.DATA:
 			datapkt := datapkt.(*pkt.DataPacket)
 			if datapkt.BlockNum != blknum {
-				return 0, fmt.Errorf("Got wrong numbered data packet! (%d != %d)", datapkt.Blk, blknum)
+				return 0, 0, fmt.Errorf("Got wrong numbered data packet! (%d != %d)", datapkt.BlockNum, blknum)
 			}
 			data = datapkt.Data
 		case pkt.OACK:
