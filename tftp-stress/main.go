@@ -117,8 +117,6 @@ func main() {
 	flag.Parse()
 
 	runtime.GOMAXPROCS(*nprocs)
-	_ = nthreads
-	_ = upload
 
 	fmt.Printf("Testing Server: '%s'\n", *serv)
 
