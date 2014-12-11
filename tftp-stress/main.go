@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var Quiet bool = false
+
 func benchReads(server, file string, threads, loops, blocksize int, reuse bool) {
 	wg := &sync.WaitGroup{}
 
@@ -58,7 +60,9 @@ func benchReads(server, file string, threads, loops, blocksize int, reuse bool) 
 	for bw := range bwcollect {
 		sum += bw
 		i++
-		fmt.Printf("\r%d/%d", i, total)
+		if !Quiet {
+			fmt.Printf("\r%d/%d", i, total)
+		}
 	}
 	fmt.Println()
 	took := time.Now().Sub(before)
@@ -118,7 +122,9 @@ func benchWrites(server string, threads, loops, nbytes, blocksize int, reuse boo
 	for bw := range bwcollect {
 		sum += bw
 		i++
-		fmt.Printf("\r%d/%d", i, total)
+		if !Quiet {
+			fmt.Printf("\r%d/%d", i, total)
+		}
 	}
 	fmt.Println()
 	took := time.Now().Sub(before)
@@ -136,9 +142,11 @@ func main() {
 	upload := flag.Int("upload", -1, "size of data for upload testing")
 	blocksize := flag.Int("blocksize", 512, "tftp blocksize")
 	reuseport := flag.Bool("reuseport", true, "whether or not to reuse the same ports")
+	quiet := flag.Bool("quiet", false, "quiet extraneous output")
 
 	flag.Parse()
 
+	Quiet = *quiet
 	runtime.GOMAXPROCS(*nprocs)
 
 	fmt.Printf("Testing Server: '%s'\n", *serv)

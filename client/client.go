@@ -42,6 +42,10 @@ func (cl *TftpClient) sendPacket(p pkt.Packet, addr *net.UDPAddr) error {
 	data := p.Bytes()
 	n, err := cl.udpconn.WriteToUDP(p.Bytes(), addr)
 	if err != nil {
+		fmt.Printf("Write UDP error: %s\n", err)
+		fmt.Printf("attempted to write %d bytes to '%s'\n", len(p.Bytes()), addr)
+		fmt.Printf("Packet type was: %d\n", p.GetType())
+		fmt.Printf("packet bytes: %v\n", p.Bytes())
 		return err
 	}
 
