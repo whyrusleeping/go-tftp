@@ -87,6 +87,7 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 	blknum := uint16(0)
 	xferred := 0
 	pktbuf := make([]byte, 1000)
+	quit := false
 	buf := make([]byte, cl.Blocksize)
 	for {
 		p, addr, err := cl.recvPacket(pktbuf)
@@ -115,6 +116,9 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 		default:
 			return 0, fmt.Errorf("unexpected packet: %v, %d", p, p.GetType())
 		}
+		if quit {
+			break
+		}
 		blknum++
 		buf = buf[:cl.Blocksize]
 		n, err := data.Read(buf)
@@ -130,8 +134,8 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if n == 0 {
-			break
+		if n < cl.Blocksize {
+			quit = true
 		}
 	}
 
