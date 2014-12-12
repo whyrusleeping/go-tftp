@@ -9,9 +9,13 @@ import (
 	"time"
 )
 
+var ErrTimeout = errors.New("timeout")
+
 type TftpClient struct {
 	servaddr  *net.UDPAddr
 	udpconn   *net.UDPConn
+	packets   chan *packetReceipt
+	kill      chan struct{}
 	Blocksize int
 }
 
@@ -31,11 +35,40 @@ func NewTftpClient(addr string) (*TftpClient, error) {
 		return nil, err
 	}
 
-	return &TftpClient{
+	cli := &TftpClient{
 		servaddr:  raddr,
 		udpconn:   uconn,
 		Blocksize: 512,
-	}, nil
+		packets:   make(chan *packetReceipt),
+		kill:      make(chan struct{}),
+	}
+
+	go cli.recvLoop()
+
+	return cli, nil
+}
+
+type packetReceipt struct {
+	Packet pkt.Packet
+	Addr   *net.UDPAddr
+	Err    error
+}
+
+func (cl *TftpClient) recvLoop() {
+	buf := make([]byte, 32768*2)
+	for {
+		pkt, addr, err := cl.recvPacket(buf)
+		select {
+		case cl.packets <- &packetReceipt{pkt, addr, err}:
+		case <-cl.kill:
+			return
+		}
+	}
+}
+
+func (cl *TftpClient) Close() {
+	cl.udpconn.Close()
+	cl.kill <- struct{}{}
 }
 
 func (cl *TftpClient) sendPacket(p pkt.Packet, addr *net.UDPAddr) error {
@@ -90,15 +123,37 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 
 	blknum := uint16(0)
 	xferred := 0
-	pktbuf := make([]byte, 1000)
 	quit := false
 	buf := make([]byte, cl.Blocksize)
+	var lastPacket pkt.Packet = req
+	var addr *net.UDPAddr
 	for {
-		p, addr, err := cl.recvPacket(pktbuf)
-		if err != nil {
-			return 0, err
+		var recv *packetReceipt
+
+		success := false
+		for !success {
+			select {
+			case recv = <-cl.packets:
+				success = true
+				addr = recv.Addr
+			case <-time.After(time.Second * 5):
+				fmt.Println("Receive timeout!")
+				var err error
+				if addr == nil {
+					err = cl.sendPacket(lastPacket, cl.servaddr)
+				} else {
+					err = cl.sendPacket(lastPacket, addr)
+				}
+				if err != nil {
+					return 0, err
+				}
+			}
 		}
-		switch p := p.(type) {
+		if recv.Err != nil {
+			return 0, recv.Err
+		}
+
+		switch p := recv.Packet.(type) {
 		case *pkt.ErrorPacket:
 			fmt.Println("Error packet.")
 			return 0, p
@@ -131,10 +186,13 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 		}
 		buf = buf[:n]
 		xferred += n
-		err = cl.sendPacket(&pkt.DataPacket{
+
+		datapkt := &pkt.DataPacket{
 			BlockNum: blknum,
 			Data:     buf,
-		}, addr)
+		}
+		lastPacket = datapkt
+		err = cl.sendPacket(datapkt, addr)
 		if err != nil {
 			return 0, err
 		}
@@ -146,8 +204,7 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 	return xferred, nil
 }
 
-func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
-	before := time.Now()
+func (cl *TftpClient) GetFile(filename string) (int, error) {
 	req := &pkt.ReqPacket{
 		Filename:  filename,
 		Mode:      "octet",
@@ -157,46 +214,66 @@ func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
 
 	err := cl.sendPacket(req, cl.servaddr)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 
 	xfersize := 0
 	blknum := uint16(1)
-	pktbuf := make([]byte, cl.Blocksize+100)
+	var lastPacket pkt.Packet = req
+	var addr *net.UDPAddr
 	for {
-		datapkt, sendaddr, err := cl.recvPacket(pktbuf)
+		var recv *packetReceipt
+		success := false
+		for !success {
+			select {
+			case recv = <-cl.packets:
+				addr = recv.Addr
+				success = true
+			case <-time.After(time.Second * 5):
+				var err error
+				if addr == nil {
+					err = cl.sendPacket(lastPacket, cl.servaddr)
+				} else {
+					err = cl.sendPacket(lastPacket, addr)
+				}
+				if err != nil {
+					return 0, err
+				}
+			}
+		}
+
 		if err != nil {
-			return 0, 0, err
+			return 0, err
 		}
 
 		var data []byte
-		switch datapkt.GetType() {
+		switch recv.Packet.GetType() {
 		case pkt.ERROR:
-			return 0, 0, datapkt.(*pkt.ErrorPacket)
+			return 0, recv.Packet.(*pkt.ErrorPacket)
 		case pkt.DATA:
-			datapkt := datapkt.(*pkt.DataPacket)
+			datapkt := recv.Packet.(*pkt.DataPacket)
 			if datapkt.BlockNum != blknum {
-				return 0, 0, fmt.Errorf("Got wrong numbered data packet! (%d != %d)", datapkt.BlockNum, blknum)
+				return 0, fmt.Errorf("Got wrong numbered data packet! (%d != %d)", datapkt.BlockNum, blknum)
 			}
 			data = datapkt.Data
 		case pkt.OACK:
 			fmt.Println("GOT OACK!!!")
 			blknum--
-			oack := datapkt.(*pkt.OAckPacket)
+			oack := recv.Packet.(*pkt.OAckPacket)
 			if oack.Options["blksize"] != fmt.Sprint(cl.Blocksize) {
-				return 0, 0, errors.New("failed to negotiate blocksize")
+				return 0, errors.New("failed to negotiate blocksize")
 			}
 		default:
-			fmt.Printf("Got: %d\n", datapkt.GetType())
-			fmt.Println(datapkt.(*pkt.AckPacket).GetBlocknum())
+			fmt.Printf("Got: %d\n", recv.Packet.GetType())
+			fmt.Println(recv.Packet.(*pkt.AckPacket).GetBlocknum())
 			fmt.Println(blknum)
-			return 0, 0, errors.New("Expected DATA packet!")
+			return 0, errors.New("Expected DATA packet!")
 		}
 
 		ack := pkt.NewAck(blknum)
-		err = cl.sendPacket(ack, sendaddr)
+		err = cl.sendPacket(ack, addr)
 		if err != nil {
-			return 0, 0, err
+			return 0, err
 		}
 
 		xfersize += len(data)
@@ -205,5 +282,5 @@ func (cl *TftpClient) GetFile(filename string) (int, time.Duration, error) {
 		}
 		blknum++
 	}
-	return xfersize, time.Now().Sub(before), nil
+	return xfersize, nil
 }

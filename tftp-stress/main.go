@@ -39,11 +39,17 @@ func benchReads(server, file string, threads, loops, blocksize int, reuse bool) 
 						panic(err)
 					}
 				}
-				nbytes, _, err := cli.GetFile(file)
+				nbytes, err := cli.GetFile(file)
 				if err != nil {
 					panic(err)
 				}
 				bwcollect <- nbytes
+				if !reuse {
+					cli.Close()
+				}
+			}
+			if reuse {
+				cli.Close()
 			}
 		}()
 	}
@@ -107,7 +113,12 @@ func benchWrites(server string, threads, loops, nbytes, blocksize int, reuse boo
 					panic(err)
 				}
 				bwcollect <- nbytes
-
+				if !reuse {
+					cli.Close()
+				}
+			}
+			if reuse {
+				cli.Close()
 			}
 		}(i)
 	}
