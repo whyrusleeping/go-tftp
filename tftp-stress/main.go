@@ -21,10 +21,11 @@ func benchReads(server, file string, threads, loops, blocksize int, reuse bool) 
 	for i := 0; i < threads; i++ {
 		wg.Add(1)
 		go func() {
+			var err error
 			var cli *client.TftpClient
 			defer wg.Done()
 			if reuse {
-				cli, err := client.NewTftpClient(server)
+				cli, err = client.NewTftpClient(server)
 				cli.Blocksize = blocksize
 				if err != nil {
 					panic(err)
@@ -33,7 +34,7 @@ func benchReads(server, file string, threads, loops, blocksize int, reuse bool) 
 
 			for j := 0; j < loops; j++ {
 				if !reuse {
-					cli, err := client.NewTftpClient(server)
+					cli, err = client.NewTftpClient(server)
 					cli.Blocksize = blocksize
 					if err != nil {
 						panic(err)
