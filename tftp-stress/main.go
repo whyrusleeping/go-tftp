@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	client "github.com/whyrusleeping/go-tftp/client"
 	"io"
+	"io/ioutil"
 	"runtime"
 	"sync"
 	"time"
@@ -12,7 +14,7 @@ import (
 
 var Quiet bool = false
 
-func benchReads(server, file string, threads, loops, blocksize int, reuse bool) {
+func benchReads(server, file string, threads, loops, blocksize int, reuse bool, verify []byte) {
 	wg := &sync.WaitGroup{}
 
 	bwcollect := make(chan int, 32)
@@ -40,9 +42,23 @@ func benchReads(server, file string, threads, loops, blocksize int, reuse bool) 
 						panic(err)
 					}
 				}
-				nbytes, err := cli.GetFile(file)
+				var buf *bytes.Buffer
+				var out io.Writer
+
+				if verify != nil {
+					buf = new(bytes.Buffer)
+					out = buf
+				}
+				nbytes, err := cli.GetFile(file, out)
 				if err != nil {
 					panic(err)
+				}
+
+				// Check data if we have a verify chunk
+				if verify != nil {
+					if !bytes.Equal(verify, buf.Bytes()) {
+						fmt.Println("ERROR: incorrect data")
+					}
 				}
 				bwcollect <- nbytes
 				if !reuse {
@@ -151,6 +167,7 @@ func main() {
 	nloops := flag.Int("loops", 1, "number of operations per thread")
 	serv := flag.String("serv", "127.0.0.1:6900", "address of server to benchmark")
 	filename := flag.String("file", "", "name of file to work with (for reads only)")
+	verify := flag.String("verify", "", "name of local file to check against (for reads only)")
 	upload := flag.Int("upload", -1, "size of data for upload testing")
 	blocksize := flag.Int("blocksize", 512, "tftp blocksize")
 	reuseport := flag.Bool("reuseport", true, "whether or not to reuse the same ports")
@@ -166,6 +183,15 @@ func main() {
 	if *upload > 0 {
 		benchWrites(*serv, *nthreads, *nloops, *upload, *blocksize, *reuseport)
 	} else {
-		benchReads(*serv, *filename, *nthreads, *nloops, *blocksize, *reuseport)
+		var veriData []byte
+		if len(*verify) > 0 {
+			out, err := ioutil.ReadFile(*verify)
+			if err != nil {
+				fmt.Printf("ERROR: %s\n", err)
+				return
+			}
+			veriData = out
+		}
+		benchReads(*serv, *filename, *nthreads, *nloops, *blocksize, *reuseport, veriData)
 	}
 }

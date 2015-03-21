@@ -56,13 +56,14 @@ func (s *Server) HandleReadReq(rrq *pkt.ReqPacket, addr *net.UDPAddr) error {
 		}
 		blknum++
 	}
+	log.Println("done with transfer")
 	return nil
 }
 
 // sendDataPacket sends the given data packet to the connected client
 // and waits for the correct ACK, or times out
 func sendDataPacket(d *pkt.DataPacket, con *net.UDPConn) error {
-	log.Println("Sending data!")
+	//log.Println("Sending data!")
 	_, err := con.Write(d.Bytes())
 	if err != nil {
 		return err

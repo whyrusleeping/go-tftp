@@ -204,7 +204,7 @@ func (cl *TftpClient) PutFile(filename string, data io.Reader) (int, error) {
 	return xferred, nil
 }
 
-func (cl *TftpClient) GetFile(filename string) (int, error) {
+func (cl *TftpClient) GetFile(filename string, out io.Writer) (int, error) {
 	req := &pkt.ReqPacket{
 		Filename:  filename,
 		Mode:      "octet",
@@ -256,6 +256,17 @@ func (cl *TftpClient) GetFile(filename string) (int, error) {
 				return 0, fmt.Errorf("Got wrong numbered data packet! (%d != %d)", datapkt.BlockNum, blknum)
 			}
 			data = datapkt.Data
+
+			// If we have an output writer, write the data out
+			if out != nil {
+				n, err := out.Write(data)
+				if err != nil {
+					return xfersize, err
+				}
+				if n != len(data) {
+					return xfersize + n, err
+				}
+			}
 		case pkt.OACK:
 			fmt.Println("GOT OACK!!!")
 			blknum--
