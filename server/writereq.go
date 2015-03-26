@@ -26,6 +26,14 @@ func (s *Server) HandleWriteReq(wrq *pkt.ReqPacket, addr *net.UDPAddr) error {
 		return err
 	}
 
+	if s.ReadOnly {
+		errPkt := pkt.ErrorPacket{}
+		errPkt.Value = "writing disallowed"
+		errPkt.Code = pkt.TFTPErrAccessViolation
+		_, err := con.Write(errPkt.Bytes())
+		return err
+	}
+
 	// Lol, security? What security?
 	fi, err := os.Create(s.servdir + "/" + wrq.Filename)
 	if err != nil {

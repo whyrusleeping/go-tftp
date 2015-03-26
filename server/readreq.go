@@ -1,7 +1,7 @@
 package server
 
 import (
-	"errors"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -37,10 +37,14 @@ func (s *Server) HandleReadReq(rrq *pkt.ReqPacket, addr *net.UDPAddr) error {
 
 	buf := make([]byte, 512)
 	blknum := uint16(1)
-	for len(buf) == 512 {
+	var done bool
+	for len(buf) == 512 && !done {
 		n, err := fi.Read(buf)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return err
+		}
+		if err == io.EOF {
+			done = true
 		}
 
 		buf = buf[:n]
@@ -76,30 +80,33 @@ func sendDataPacket(d *pkt.DataPacket, con *net.UDPConn) error {
 	// Move it to its own function
 	go func() {
 		ack := make([]byte, 256)
-		n, _, err := con.ReadFromUDP(ack)
-		if err != nil {
-			ackch <- err
-			return
-		}
+		for {
+			n, _, err := con.ReadFromUDP(ack)
+			if err != nil {
+				ackch <- err
+				return
+			}
 
-		pack, err := pkt.ParsePacket(ack[:n])
-		if err != nil {
-			ackch <- err
-			return
-		}
+			pack, err := pkt.ParsePacket(ack[:n])
+			if err != nil {
+				ackch <- err
+				return
+			}
 
-		// Check packet type
-		ackpack, ok := pack.(*pkt.AckPacket)
-		if !ok {
-			ackch <- pkt.ErrPacketType
-			return
-		}
+			// Check packet type
+			ackpack, ok := pack.(*pkt.AckPacket)
+			if !ok {
+				ackch <- pkt.ErrPacketType
+				return
+			}
 
-		if ackpack.GetBlocknum() != d.BlockNum {
-			ackch <- errors.New("wrong blocknum in ack")
+			if ackpack.GetBlocknum() != d.BlockNum {
+				log.Printf("got ack(%d) but expected ack(%d)\n", d.BlockNum, ackpack.GetBlocknum())
+				continue
+			}
+			ackch <- nil
 			return
 		}
-		ackch <- nil
 	}()
 
 	// Loop and retransmit until ack or timeout
@@ -109,6 +116,7 @@ func sendDataPacket(d *pkt.DataPacket, con *net.UDPConn) error {
 		case <-maxtimeout:
 			return ErrTimeout
 		case <-retransmit:
+			log.Println("Retransmit")
 			_, err := con.Write(d.Bytes())
 			if err != nil {
 				return err

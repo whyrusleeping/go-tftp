@@ -113,6 +113,17 @@ type ErrorPacket struct {
 	Value string
 }
 
+const (
+	TFTPErrUndefined uint16 = iota
+	TFTPErrNotFound
+	TFTPErrAccessViolation
+	TFTPErrDiskFull
+	TFTPErrIllegalOp
+	TFTPErrUnknownTID
+	TFTPErrAlreadyExists
+	TFTPErrNoSuchUser
+)
+
 func (p *ErrorPacket) Error() string {
 	return p.Value
 }

@@ -33,6 +33,9 @@ var ErrUnexpectedPacket = errors.New("unexpected packet received")
 type Server struct {
 	// the directory to read and write files from.
 	servdir string
+
+	// Set true to disable writes
+	ReadOnly bool
 }
 
 // NewServer returns a new tftp Server instance that will
@@ -61,9 +64,17 @@ func (s *Server) HandleClient(addr *net.UDPAddr, req pkt.Packet) {
 
 	switch reqpkt.GetType() {
 	case pkt.RRQ:
-		s.HandleReadReq(reqpkt, clientaddr)
+		err := s.HandleReadReq(reqpkt, clientaddr)
+		if err != nil {
+			log.Println("read request finished, with error:")
+			log.Println(err)
+		}
 	case pkt.WRQ:
-		s.HandleWriteReq(reqpkt, clientaddr)
+		err := s.HandleWriteReq(reqpkt, clientaddr)
+		if err != nil {
+			log.Println("write request finished, with error:")
+			log.Println(err)
+		}
 	default:
 		log.Println("Invalid Packet Type!")
 	}
