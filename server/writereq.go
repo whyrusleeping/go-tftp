@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log"
 	"net"
-	"os"
 
 	pkt "github.com/whyrusleeping/go-tftp/packet"
 )
@@ -35,7 +34,7 @@ func (s *Server) HandleWriteReq(wrq *pkt.ReqPacket, addr *net.UDPAddr) error {
 	}
 
 	// Lol, security? What security?
-	fi, err := os.Create(s.servdir + "/" + wrq.Filename)
+	fi, err := s.WriteFunc(s.servdir + "/" + wrq.Filename)
 	if err != nil {
 		return err
 	}

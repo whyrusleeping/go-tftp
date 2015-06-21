@@ -4,7 +4,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
 	"time"
 
 	pkt "github.com/whyrusleeping/go-tftp/packet"
@@ -30,7 +29,7 @@ func (s *Server) HandleReadReq(rrq *pkt.ReqPacket, addr *net.UDPAddr) error {
 
 	// Open whatever file it is that the client desires,
 	// no questions asked (TODO: enforce root locking)
-	fi, err := os.Open(s.servdir + "/" + rrq.Filename)
+	fi, err := s.ReadFunc(s.servdir + "/" + rrq.Filename)
 	if err != nil {
 		return err
 	}
