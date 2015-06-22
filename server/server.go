@@ -3,6 +3,7 @@ package server
 
 import (
 	"errors"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -29,20 +30,28 @@ var ErrTimeout = errors.New("timed out")
 // received when a different one was expected.
 var ErrUnexpectedPacket = errors.New("unexpected packet received")
 
+// Function types for read and write abstraction
+type ReaderFunc func(filename string) (r io.Reader, err error)
+type WriterFunc func(filename string) (r io.Writer, err error)
+
 // Server is a TFTP server.
 type Server struct {
 	// the directory to read and write files from.
 	servdir string
-
+	// functions for reading and writing
+	ReadFunc  ReaderFunc
+	WriteFunc WriterFunc
 	// Set true to disable writes
 	ReadOnly bool
 }
 
 // NewServer returns a new tftp Server instance that will
 // serve files from the given directory
-func NewServer(dir string) *Server {
+func NewServer(dir string, rf ReaderFunc, wr WriterFunc) *Server {
 	return &Server{
-		servdir: dir,
+		servdir:   dir,
+		ReadFunc:  rf,
+		WriteFunc: wr,
 	}
 }
 
