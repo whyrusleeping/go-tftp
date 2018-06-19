@@ -25,8 +25,9 @@ func main() {
 
 	dir := flag.String("dir", cwd, "specify a directory to serve files from")
 	port := flag.String("port", "6900", "specify a port to listen on")
+	address := flag.String("address", "", "specify address to listen on")
 	flag.Parse()
 
 	srv := server.NewServer(*dir, reader, writer)
-	panic(srv.Serve(":" + *port))
+	panic(srv.Serve(*address + ":" + *port))
 }
